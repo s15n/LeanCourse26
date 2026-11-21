@@ -27,7 +27,7 @@ structure FiniteSubsetSpace where
 
 instance : TopologicalSpace (finPowerSpace X k) := by
   unfold finPowerSpace
-  exact inferInstance-/
+  infer_instance-/
 
 -- if X = ∅, then expₖ∅ = ∅ and also ∅ᵏ = ∅
 def Q (x : Fin k → X) : FiniteSubsetSpace X k where
@@ -49,82 +49,98 @@ def Q (x : Fin k → X) : FiniteSubsetSpace X k where
 
 -- better? (also 20.11.)
 omit [TopologicalSpace X] in
-lemma Q_surjective (hk : k > 0) : Function.Surjective (Q X k) := by
-  intro Λ
-  have hx : Λ.finiteSubset.Nonempty := Λ.nonempty.resolve_left (by lia)
-  --let x₀ := hx.choose
-  let x_list_short := Λ.finiteSubset.toList
-  --let Λ' := x_list_short.toFinset
-  --have : Λ' = Λ.finiteSubset := by
-  --  exact Finset.toList_toFinset Λ.finiteSubset
-  have h_x_ls_l : x_list_short.length = Λ.finiteSubset.card := by
-    exact Finset.length_toList Λ.finiteSubset
-  have : 0 < x_list_short.length := by calc
-    x_list_short.length = Λ.finiteSubset.card := by assumption
-                      _ > 0 := by exact Finset.card_pos.mpr hx
-  let x₀ := x_list_short.get ⟨0, by assumption⟩
-  let x_rest := List.replicate (k - x_list_short.length) x₀
-  let x_list := x_list_short ++ x_rest
-  have hxlk : x_list.length = k := by
-    calc x_list.length
-      _ = x_list_short.length + x_rest.length := by
-        exact List.length_append
-      _ = x_list_short.length + (k - x_list_short.length) := by
-        unfold x_rest
-        rw [List.length_replicate]
-      _ = (k - x_list_short.length) + x_list_short.length := by lia
-      _ = k := by
-        refine Nat.sub_add_cancel ?_
-        rw [h_x_ls_l]
-        exact Λ.maxCard
+lemma Q_surjective : Function.Surjective (Q X k) := by
+  by_cases hk : k > 0
+  · intro Λ
+    have hx : Λ.finiteSubset.Nonempty := Λ.nonempty.resolve_left (by lia)
+    --let x₀ := hx.choose
+    let x_list_short := Λ.finiteSubset.toList
+    --let Λ' := x_list_short.toFinset
+    --have : Λ' = Λ.finiteSubset := by
+    --  exact Finset.toList_toFinset Λ.finiteSubset
+    have h_x_ls_l : x_list_short.length = Λ.finiteSubset.card := by
+      exact Finset.length_toList Λ.finiteSubset
+    have : 0 < x_list_short.length := by calc
+      x_list_short.length = Λ.finiteSubset.card := by assumption
+                        _ > 0 := by exact Finset.card_pos.mpr hx
+    let x₀ := x_list_short.get ⟨0, by assumption⟩
+    let x_rest := List.replicate (k - x_list_short.length) x₀
+    let x_list := x_list_short ++ x_rest
+    have hxlk : x_list.length = k := by
+      calc x_list.length
+        _ = x_list_short.length + x_rest.length := by
+          exact List.length_append
+        _ = x_list_short.length + (k - x_list_short.length) := by
+          unfold x_rest
+          rw [List.length_replicate]
+        _ = (k - x_list_short.length) + x_list_short.length := by lia
+        _ = k := by
+          refine Nat.sub_add_cancel ?_
+          rw [h_x_ls_l]
+          exact Λ.maxCard
 
-  let x : Fin k → X := fun i ↦ x_list.get (Fin.cast hxlk.symm i)
-  use x
-  have hIm : Finset.image x Finset.univ = Λ.finiteSubset := by
-    ext a
-    simp
-    constructor
-    · intro ha
-      obtain ⟨i, hi⟩ := ha
-      have h1 : x i ∈ x_list := by simp [x]
-      have h2 : x i ∈ x_list_short ++ x_rest := by exact h1
-      have h3 : x i ∈ x_list_short := by
-        simp at h2
-        obtain hrs | hr := h2
-        · assumption
-        · have h21 : x i = x₀ := by
-            unfold x_rest at hr
-            simp at hr
-            exact hr.right
-          rw [h21, Finset.mem_toList]
-          --exact hx.choose_spec
-          suffices x₀ ∈ Λ.finiteSubset.toList by exact Finset.mem_toList.mp this
-          unfold x₀
-          apply List.get_mem
-      rw [Finset.mem_toList] at h3
-      rwa [← hi]
-    · intro ha
-      rw [← Finset.mem_toList, List.mem_iff_get] at ha
-      obtain ⟨i, hai⟩ := ha
-      let i' : Fin k := Fin.castLE (by
-        calc Λ.finiteSubset.toList.length
-          _ = Λ.finiteSubset.card := by exact Finset.length_toList Λ.finiteSubset
-          _ ≤ k := Λ.maxCard
-        ) i
-      use i'
-      unfold x x_list
-      have : x_list_short.get i = a := by
-        unfold x_list_short
-        exact hai
+    let x : Fin k → X := fun i ↦ x_list.get (Fin.cast hxlk.symm i)
+    use x
+    have hIm : Finset.image x Finset.univ = Λ.finiteSubset := by
+      ext a
       simp
-      rw [List.getElem_append_left (by
-        calc i'.val
-          _ = i.val := by rfl
-          _ < Λ.finiteSubset.toList.length := i.isLt
-      )]
-      simp at this
-      assumption
-  simp [Q, hIm]
+      constructor
+      · intro ha
+        obtain ⟨i, hi⟩ := ha
+        have h1 : x i ∈ x_list := by simp [x]
+        have h2 : x i ∈ x_list_short ++ x_rest := by exact h1
+        have h3 : x i ∈ x_list_short := by
+          simp at h2
+          obtain hrs | hr := h2
+          · assumption
+          · have h21 : x i = x₀ := by
+              unfold x_rest at hr
+              simp at hr
+              exact hr.right
+            rw [h21, Finset.mem_toList]
+            --exact hx.choose_spec
+            suffices x₀ ∈ Λ.finiteSubset.toList by exact Finset.mem_toList.mp this
+            unfold x₀
+            apply List.get_mem
+        rw [Finset.mem_toList] at h3
+        rwa [← hi]
+      · intro ha
+        rw [← Finset.mem_toList, List.mem_iff_get] at ha
+        obtain ⟨i, hai⟩ := ha
+        let i' : Fin k := Fin.castLE (by
+          calc Λ.finiteSubset.toList.length
+            _ = Λ.finiteSubset.card := by exact Finset.length_toList Λ.finiteSubset
+            _ ≤ k := Λ.maxCard
+          ) i
+        use i'
+        unfold x x_list
+        have : x_list_short.get i = a := by
+          unfold x_list_short
+          exact hai
+        simp
+        rw [List.getElem_append_left (by
+          calc i'.val
+            _ = i.val := by rfl
+            _ < Λ.finiteSubset.toList.length := i.isLt
+        )]
+        simp at this
+        assumption
+    simp [Q, hIm]
+  · replace hk : k = 0 := by lia
+    intro y
+    have hy : y.finiteSubset = ∅ := by
+      rw [← Finset.card_eq_zero]
+      have := y.maxCard
+      lia
+    use fun i ↦ by
+      rw [hk] at i
+      apply Fin.pos at i
+      exfalso
+      contradiction
+    simp [Q]
+    congr
+    simp [hy, hk]
+
 
 -- 17.11.
 
@@ -215,7 +231,7 @@ lemma continuous_induces_continuous
   have hQf : (Q Y k) ∘ fk = expf ∘ (Q X k) := by
     ext x
     simp [fk, expf, inducedMap, Q, Finset.image_comp]
-  rw [continuous_def]
+  constructor
   intro U hU
   have h_preims := by
     calc fk ⁻¹' ((Q Y k) ⁻¹' U)
@@ -263,22 +279,19 @@ noncomputable def exp (k : ℕ) : TopCat ⥤ TopCat where
 
 #click_suggestions
 
-lemma fss_compact
+theorem fss_compact
     {X : Type*} [TopologicalSpace X]
     {k : ℕ}
     (hX : CompactSpace X) : CompactSpace (FiniteSubsetSpace X k) := by
-  by_cases hk : k > 0
-  · have : IsCompact ((Q X k) '' Set.univ) := by
-      apply IsCompact.image
-      exact isCompact_univ
-      exact continuous_coinduced_rng
-    -- TODO: extract the following
-    have : (Q X k) '' Set.univ = Set.univ := by
-      apply Set.image_univ_of_surjective
-      exact Q_surjective X k hk
-    sorry
-  · replace hk : k = 0 := by lia
-    sorry
+  have : IsCompact ((Q X k) '' Set.univ) := by
+    apply IsCompact.image
+    exact isCompact_univ
+    exact continuous_coinduced_rng
+  have h_im_Q : (Q X k) '' Set.univ = Set.univ := by
+    apply Set.image_univ_of_surjective
+    exact Q_surjective X k
+  rwa [← isCompact_univ_iff, ← h_im_Q]
+
 
 variable {X : Type*} [TopologicalSpace X] {k : ℕ}
 #check CompactSpace (FiniteSubsetSpace X k)
