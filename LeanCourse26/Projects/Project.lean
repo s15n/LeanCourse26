@@ -1,6 +1,7 @@
 import Mathlib.Topology.Basic
 import Mathlib.Topology.Constructions
 import Mathlib.Topology.Defs.Induced
+import Mathlib.Topology.Homotopy.Basic
 import Mathlib.CategoryTheory.Functor.Basic
 import Mathlib.Topology.Category.TopCat.Basic
 
@@ -8,6 +9,7 @@ import Mathlib.Topology.Category.TopCat.Basic
 
 section Def1
 
+-- TODO: switch order to k X
 variable (X : Type*) [TopologicalSpace X] [DecidableEq X] (k : ℕ)
 
 -- Λ : FiniteSubsetSpace means
@@ -78,7 +80,6 @@ lemma Q_surjective : Function.Surjective (Q X k) := by
           refine Nat.sub_add_cancel ?_
           rw [h_x_ls_l]
           exact Λ.maxCard
-
     let x : Fin k → X := fun i ↦ x_list.get (Fin.cast hxlk.symm i)
     use x
     have hIm : Finset.image x Finset.univ = Λ.finiteSubset := by
@@ -233,7 +234,7 @@ lemma continuous_induces_continuous
     simp [fk, expf, inducedMap, Q, Finset.image_comp]
   constructor
   intro U hU
-  have h_preims := by
+  have preimages_commute := by
     calc fk ⁻¹' ((Q Y k) ⁻¹' U)
       _ = ((Q Y k) ∘ fk) ⁻¹' U := by trivial
       _ = (expf ∘ (Q X k)) ⁻¹' U := by rw [hQf]
@@ -245,7 +246,7 @@ lemma continuous_induces_continuous
     apply IsOpen.preimage hfk
     assumption
   have h_preimQ : IsOpen ((Q X k) ⁻¹' (expf ⁻¹' U)) := by
-    rwa [← h_preims]
+    rwa [← preimages_commute]
   rwa [← isOpen_coinduced] at h_preimQ
 
 
@@ -259,23 +260,39 @@ open CategoryTheory
 
 #click_suggestions
 
-noncomputable def exp (k : ℕ) : TopCat ⥤ TopCat where
-  obj := fun X ↦ {
-    carrier := FiniteSubsetSpace X k
-    str := inferInstance
-  }
-  map f := TopCat.ofHom {
-    toFun := inducedMap k f
-    continuous_toFun := continuous_induces_continuous f.hom.continuous
-  }
+-- push 20.11.
+
+noncomputable def exp_obj (k : ℕ) (X : TopCat) : TopCat where
+  carrier := FiniteSubsetSpace X k
+  str := inferInstance
+
+noncomputable def exp_hom
+    (k : ℕ) {X Y : Type*}
+    [TopologicalSpace X] [TopologicalSpace Y]
+    (f : C(X, Y)) :
+    C(FiniteSubsetSpace X k, FiniteSubsetSpace Y k) where
+  toFun := inducedMap k f
+  continuous_toFun := continuous_induces_continuous f.continuous
+
+-- pop 20.11.
+
+noncomputable def exp_functor (k : ℕ) : TopCat ⥤ TopCat where
+  obj X := exp_obj k X
+  map f := TopCat.ofHom (exp_hom k f.hom)
   map_id X := by
     apply TopCat.hom_ext
     ext Λ
-    simp [inducedMap]
+    simp [exp_hom]
+    unfold inducedMap
+    simp
+    congr
   map_comp f g := by
     apply TopCat.hom_ext
     ext Λ
-    simp [inducedMap, Finset.image_comp]
+    simp [exp_hom]
+    unfold inducedMap
+    simp [Finset.image_comp]
+    congr
 
 #click_suggestions
 
@@ -287,15 +304,107 @@ theorem fss_compact
     apply IsCompact.image
     exact isCompact_univ
     exact continuous_coinduced_rng
-  have h_im_Q : (Q X k) '' Set.univ = Set.univ := by
+  have q_surjective : (Q X k) '' Set.univ = Set.univ := by
     apply Set.image_univ_of_surjective
     exact Q_surjective X k
-  rwa [← isCompact_univ_iff, ← h_im_Q]
+  rwa [← isCompact_univ_iff, ← q_surjective]
 
 
-variable {X : Type*} [TopologicalSpace X] {k : ℕ}
-#check CompactSpace (FiniteSubsetSpace X k)
+--variable {X : Type*} [TopologicalSpace X] {k : ℕ}
+--#check CompactSpace (FiniteSubsetSpace X k)
 
 -- TODO: homotopy
 
 -- TODO: Hausdorff
+
+-- TODO: rename hypotheses
+
+-- 21.11.
+
+noncomputable def exp_homotopy
+    {X Y : Type*}
+    [TopologicalSpace X] [TopologicalSpace Y]
+    (k : ℕ) {f g : C(X, Y)}
+    (ht_fg : ContinuousMap.Homotopy f g) :
+    ContinuousMap.Homotopy (exp_hom k f) (exp_hom k g) where
+  toFun tΛ := {
+    finiteSubset := tΛ.2.finiteSubset.image (ht_fg.toFun.curry tΛ.1)
+    nonempty := by
+      by_cases hk : k > 0
+      · right
+        simp
+        exact tΛ.2.nonempty.resolve_left (by lia)
+      · left
+        lia
+    maxCard := by
+      grw [Finset.card_image_le] -- TODO: see if grw is applicable anywhere else
+      exact tΛ.2.maxCard
+  }
+  continuous_toFun := by sorry -- the proof I did
+  -- TODO: the following two are the same
+  map_zero_left := by
+    intro Λ
+    simp [exp_hom]
+    unfold inducedMap
+    congr
+    ext x
+    simp
+  map_one_left := by
+    intro Λ
+    simp [exp_hom]
+    unfold inducedMap
+    congr
+    ext x
+    simp
+
+theorem exp_preserves_homotopy
+    {X Y : Type*}
+    [TopologicalSpace X] [TopologicalSpace Y]
+    {k : ℕ} {f g : C(X, Y)}
+    (f_hom_g : ContinuousMap.Homotopic f g) :
+    ContinuousMap.Homotopic (exp_hom k f) (exp_hom k g) := by
+  unfold ContinuousMap.Homotopic at f_hom_g ⊢
+  obtain ⟨homotopy⟩ := f_hom_g
+  exact ⟨exp_homotopy k homotopy⟩
+
+theorem fss_hausdorff
+    {X : Type*} [TopologicalSpace X]
+    {k : ℕ}
+    (hX : T2Space X) : T2Space (FiniteSubsetSpace X k) := by
+  rw [t2_iff_nhds]
+  intro S T
+  contrapose
+  intro hST
+  simp
+  rw [Filter.inf_eq_bot_iff]
+  have s : X := sorry
+  have hs : s ∈ S.finiteSubset := sorry
+  have hs : s ∉ T.finiteSubset := sorry
+  have UV (t : X) (ht : t ∈ T.finiteSubset) := by
+    rw [t2_iff_nhds] at hX
+    have : ¬s = t → ¬(nhds s ⊓ nhds t).NeBot := by contrapose; exact hX
+    simp at this
+    specialize this sorry
+    exact this
+  have U_f : Set X := sorry
+  have V_f : Set X := sorry
+  have hU : U_f ∈ nhds s := by sorry
+  have hV : V_f ∈ nhdsSet T.finiteSubset := by sorry
+  rw [mem_nhds_iff] at hU
+  obtain ⟨U, hU⟩ := hU
+  rw [mem_nhdsSet] at hV
+  obtain ⟨V, hV⟩ := hV
+  let U_times_X_pow : Set (Fin k → X) := {x | x ⟨0, by sorry⟩ ∈ U}
+  let V_pow : Set (Fin k → X) := {x | ∀ i, x i ∈ V}
+  let QU := (Q X k) '' U_times_X_pow
+  let QV := (Q X k) '' V_pow
+  use QU, by sorry, QV, by sorry
+  apply Disjoint.inter_eq
+  apply Set.disjoint_image_image
+  intro x hx y hy
+  have : ∀ l ∈ (Q X k y).finiteSubset, l ∈ V := by sorry
+  have : ∃ l ∈ (Q X k x).finiteSubset, l ∉ V := by sorry
+  have : (Q X k x).finiteSubset ≠ (Q X k y).finiteSubset := by sorry
+  intro hQ
+  have : (Q X k x).finiteSubset = (Q X k y).finiteSubset := by congr
+  contradiction
