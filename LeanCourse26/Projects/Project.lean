@@ -268,7 +268,7 @@ lemma continuous_induces_continuous
 
 end Def2
 
-open Classical
+--open Classical
 
 open CategoryTheory
 
@@ -276,13 +276,14 @@ open CategoryTheory
 
 -- push 20.11.
 
-noncomputable def exp_obj (k : ℕ) (X : TopCat) : TopCat where
+noncomputable def exp_obj (k : ℕ) (X : TopCat) [DecidableEq X] : TopCat where
   carrier := FiniteSubsetSpace k X
   str := inferInstance
 
 noncomputable def exp_hom
     (k : ℕ) {X Y : Type*}
     [TopologicalSpace X] [TopologicalSpace Y]
+    [DecidableEq X] [DecidableEq Y]
     (f : C(X, Y)) :
     C(FiniteSubsetSpace k X, FiniteSubsetSpace k Y) where
   toFun := inducedMap k f
@@ -290,6 +291,7 @@ noncomputable def exp_hom
 
 -- pop 20.11.
 
+open Classical in
 noncomputable def exp_functor (k : ℕ) : TopCat ⥤ TopCat where
   obj X := exp_obj k X
   map f := TopCat.ofHom (exp_hom k f.hom)
@@ -311,13 +313,13 @@ noncomputable def exp_functor (k : ℕ) : TopCat ⥤ TopCat where
 #click_suggestions
 
 theorem fss_compact
-    {X : Type*} [TopologicalSpace X]
+    {X : Type*} [TopologicalSpace X] [DecidableEq X]
     {k : ℕ}
     (hX : CompactSpace X) : CompactSpace (FiniteSubsetSpace k X) := by
   have : IsCompact ((@Q k X _) '' Set.univ) := by
     apply IsCompact.image
     exact isCompact_univ
-    exact continuous_coinduced_rng
+    exact continuous_coinduced_rng -- TODO: Lemma?
   have q_surjective : (@Q k X _) '' Set.univ = Set.univ := by
     apply Set.image_univ_of_surjective
     exact Q_surjective
@@ -335,14 +337,14 @@ theorem fss_compact
 
 -- 21.11.
 
-noncomputable def exp_homotopy
+noncomputable def exp_homotopy_fun
     {X Y : Type*}
     [TopologicalSpace X] [TopologicalSpace Y]
-    (k : ℕ) {f g : C(X, Y)}
-    (ht_fg : ContinuousMap.Homotopy f g) :
-    ContinuousMap.Homotopy (exp_hom k f) (exp_hom k g) where
-  toFun tΛ := {
-    finiteSubset := tΛ.2.finiteSubset.image (ht_fg.toFun.curry tΛ.1)
+    [DecidableEq Y]
+    (k : ℕ)
+    (H : unitInterval × X → Y) :
+    unitInterval × FiniteSubsetSpace k X → FiniteSubsetSpace k Y := fun tΛ ↦ {
+    finiteSubset := tΛ.2.finiteSubset.image (H.curry tΛ.1)
     nonempty := by
       by_cases hk : k > 0
       · right
@@ -354,13 +356,24 @@ noncomputable def exp_homotopy
       grw [Finset.card_image_le] -- TODO: see if grw is applicable anywhere else
       exact tΛ.2.maxCard
   }
-  continuous_toFun := by sorry -- the interesting part
+
+-- TODO: "def" lemma? Here or anywhere?
+
+noncomputable def exp_homotopy
+    {X Y : Type*}
+    [TopologicalSpace X] [TopologicalSpace Y]
+    [DecidableEq X] [DecidableEq Y]
+    (k : ℕ) {f g : C(X, Y)}
+    (H : ContinuousMap.Homotopy f g) :
+    ContinuousMap.Homotopy (exp_hom k f) (exp_hom k g) where
+  toFun := exp_homotopy_fun k H
   -- TODO: the following two are the same
   map_zero_left := by
     intro Λ
     simp [exp_hom]
     unfold inducedMap
     congr
+    simp [exp_homotopy_fun]
     ext x
     simp
   map_one_left := by
@@ -368,12 +381,92 @@ noncomputable def exp_homotopy
     simp [exp_hom]
     unfold inducedMap
     congr
+    simp [exp_homotopy_fun]
     ext x
     simp
+  continuous_toFun := by
+    -- TODO: shorthands for these functions? also for the other proof
+    let H' := exp_homotopy_fun k H
+    let Hk : (Fin k → (unitInterval × X)) → (Fin k → Y) := fun tx ↦ H ∘ tx
+    have cont_Hk : Continuous Hk := by
+      unfold Hk
+      apply Pi.continuous_postcomp
+      exact H.continuous
+    let id_times_Q : (unitInterval × (Fin k → X)) → (unitInterval × FiniteSubsetSpace k X) := fun tx ↦ (tx.1, Q (tx.2))
+    have cont_id_times_Q : Continuous id_times_Q := by
+      unfold id_times_Q
+      simp
+      constructor
+      · exact continuous_fst
+      · apply Continuous.snd'
+        exact continuous_coinduced_rng
+    let iso : ((Fin k → unitInterval) × (Fin k → X)) → (Fin k → (unitInterval × X)) :=
+      fun tx i ↦ (tx.1 i, tx.2 i)
+      --fun tx ↦ Equiv.arrowProdEquivProdArrow.symm tx.1 tx.2
+    have cont_iso : Continuous iso := by
+      unfold iso
+      rw [continuous_pi_iff]
+      intro i
+      rw [continuous_prodMk]
+      have h1 : ∀ i : Fin k, Continuous fun tx : ((Fin k → unitInterval) × (Fin k → X)) ↦ tx.1 i := by
+        rw [← continuous_pi_iff]
+        exact continuous_fst
+      have h2 : ∀ i : Fin k, Continuous fun tx : ((Fin k → unitInterval) × (Fin k → X)) ↦ tx.2 i := by
+        rw [← continuous_pi_iff]
+        exact continuous_snd
+      exact ⟨h1 i, h2 i⟩
+    let ids : (unitInterval × (Fin k → X)) → ((Fin k → unitInterval) × (Fin k → X)) := fun tx ↦ (fun _ ↦ tx.1, fun i ↦ tx.2 i)
+    have cont_ids : Continuous ids := by
+      unfold ids
+      rw [continuous_prodMk]
+      constructor
+      · rw [continuous_pi_iff]
+        intro _
+        exact continuous_fst
+      · exact continuous_snd
+    have comm_rect : H' ∘ id_times_Q = Q ∘ Hk ∘ iso ∘ ids := by
+      ext tx
+      simp [Hk, iso, ids, H', id_times_Q, exp_homotopy_fun, Q]
+      -- H(t)({x1,...}) = {H(t,x1),...}
+      ext y
+      constructor
+      · intro hy
+        rw [Finset.mem_image] at hy ⊢
+        obtain ⟨x, ⟨hx1, hx2⟩⟩ := hy
+        rw [Finset.mem_image] at hx1
+        obtain ⟨i, ⟨hi', hi⟩⟩ := hx1
+        use i, hi'
+        simp
+        rw [hi]
+        simp at hx2
+        exact hx2
+      · intro hy
+        rw [Finset.mem_image] at hy ⊢
+        obtain ⟨i, ⟨hi', hi⟩⟩ := hy
+        use tx.2 i
+        simp
+        exact hi
+    rw [continuous_def]
+    intro U hU
+    have cont_path1 : Continuous (Q ∘ Hk ∘ iso ∘ ids) := by
+      rw [← continuous_coinduced_dom]
+      sorry
+    have : IsOpen ((Q ∘ Hk ∘ iso ∘ ids) ⁻¹' U) := by
+      exact cont_path1.isOpen_preimage U hU
+    have : IsOpen ((H' ∘ id_times_Q) ⁻¹' U) := by
+      rwa [comm_rect]
+    have : IsOpen (id_times_Q ⁻¹' (H' ⁻¹' U)) := by
+      rwa [← Set.preimage_comp]
+    rw [← isOpen_coinduced] at this
+    rw [show exp_homotopy_fun k H = H' by rfl]
+    sorry
+
+
 
 theorem exp_preserves_homotopy
     {X Y : Type*}
     [TopologicalSpace X] [TopologicalSpace Y]
+    [DecidableEq X] [DecidableEq Y]
     {k : ℕ} {f g : C(X, Y)}
     (f_hom_g : ContinuousMap.Homotopic f g) :
     ContinuousMap.Homotopic (exp_hom k f) (exp_hom k g) := by
@@ -382,7 +475,7 @@ theorem exp_preserves_homotopy
   exact ⟨exp_homotopy k homotopy⟩
 
 theorem fss_hausdorff
-    {X : Type*} [TopologicalSpace X]
+    {X : Type*} [TopologicalSpace X] [DecidableEq X]
     {k : ℕ}
     (hX : T2Space X) : T2Space (FiniteSubsetSpace k X) := by
   rw [t2_iff_nhds]
