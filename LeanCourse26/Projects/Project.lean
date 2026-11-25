@@ -10,13 +10,18 @@ import Mathlib.Topology.Category.TopCat.Basic
 section Def1
 
 -- TODO: switch order to k X
-variable (X : Type*) [TopologicalSpace X] [DecidableEq X] (k : ℕ)
+-- 23.11.: refactor this
+--variable (X : Type*) [TopologicalSpace X] [DecidableEq X] (k : ℕ)
 
 -- Λ : FiniteSubsetSpace means
 --   Λ is a finite subset of X with 0 < #Λ ≤ k
 -- expₖX
 -- exception: exp₀X := ∅ (by lecture: rather use nonsensical than constraints)
-structure FiniteSubsetSpace where
+structure FiniteSubsetSpace
+    (k : ℕ) (X: Type*)
+    --[TopologicalSpace X]
+    --[DecidableEq X]
+    where
   finiteSubset : Finset X
   nonempty : k = 0 ∨ finiteSubset.Nonempty
   maxCard : finiteSubset.card ≤ k -- TODO: Notation # ?
@@ -32,7 +37,12 @@ instance : TopologicalSpace (finPowerSpace X k) := by
   infer_instance-/
 
 -- if X = ∅, then expₖ∅ = ∅ and also ∅ᵏ = ∅
-def Q (x : Fin k → X) : FiniteSubsetSpace X k where
+def Q
+    {k : ℕ} {X: Type*}
+    --[TopologicalSpace X]
+    [DecidableEq X]
+    (x : Fin k → X) :
+    FiniteSubsetSpace k X where
   finiteSubset := Finset.univ.image x -- {x 1, ..., x k} Finset X
   nonempty := by
     by_cases hk : k > 0
@@ -47,11 +57,15 @@ def Q (x : Fin k → X) : FiniteSubsetSpace X k where
     have := Finset.card_fin k
     lia
 
+variable {k : ℕ} {X: Type*} [DecidableEq X]
+#check (@Q k X _)
+
 -- 18.11.
 
 -- better? (also 20.11.)
-omit [TopologicalSpace X] in
-lemma Q_surjective : Function.Surjective (Q X k) := by
+lemma Q_surjective
+    {k : ℕ} {X: Type*} [DecidableEq X] :
+    Function.Surjective (@Q k X _) := by
   by_cases hk : k > 0
   · intro Λ
     have hx : Λ.finiteSubset.Nonempty := Λ.nonempty.resolve_left (by lia)
@@ -157,9 +171,9 @@ end Def1
 
 -- TODO: name
 instance topFSS
-  {X : Type*} [TopologicalSpace X] [DecidableEq X] {k : ℕ} :
-  TopologicalSpace (FiniteSubsetSpace X k) :=
-  TopologicalSpace.coinduced (Q X k) inferInstance
+  {k : ℕ} {X : Type*} [TopologicalSpace X] [DecidableEq X] :
+  TopologicalSpace (FiniteSubsetSpace k X) :=
+  TopologicalSpace.coinduced Q inferInstance
 
 #check topFSS
 
@@ -169,7 +183,7 @@ def inducedMap'
     {X Y : Type*} [DecidableEq X]
     {k : ℕ}
     (f : Fin k → Y → X) :
-    Y → FiniteSubsetSpace X k :=
+    Y → FiniteSubsetSpace k X :=
   fun y ↦ {
     finiteSubset := Finset.univ.image (fun i ↦ f i y)
     nonempty := by
@@ -191,7 +205,7 @@ def inducedMap'
 def inducedMap
     {X Y : Type*} [DecidableEq Y]
     (k : ℕ) (f : X → Y) :
-    FiniteSubsetSpace X k → FiniteSubsetSpace Y k :=
+    FiniteSubsetSpace k X → FiniteSubsetSpace k Y :=
   fun Λ ↦ {
     finiteSubset := Λ.finiteSubset.image f
     nonempty := by
@@ -229,23 +243,23 @@ lemma continuous_induces_continuous
   let fk : (Fin k → X) → (Fin k → Y) := fun x ↦ f ∘ x
   have hfk : Continuous fk := by
     exact Pi.continuous_postcomp hf
-  have hQf : (Q Y k) ∘ fk = expf ∘ (Q X k) := by
+  have hQf : Q ∘ fk = expf ∘ Q := by
     ext x
     simp [fk, expf, inducedMap, Q, Finset.image_comp]
   constructor
   intro U hU
   have preimages_commute := by
-    calc fk ⁻¹' ((Q Y k) ⁻¹' U)
-      _ = ((Q Y k) ∘ fk) ⁻¹' U := by trivial
-      _ = (expf ∘ (Q X k)) ⁻¹' U := by rw [hQf]
-      _ = (Q X k) ⁻¹' (expf ⁻¹' U) := by trivial
-  have : IsOpen ((Q Y k) ⁻¹' U) := by
+    calc fk ⁻¹' (Q ⁻¹' U)
+      _ = (Q ∘ fk) ⁻¹' U := by trivial
+      _ = (expf ∘ Q) ⁻¹' U := by rw [hQf]
+      _ = Q ⁻¹' (expf ⁻¹' U) := by trivial
+  have : IsOpen (Q ⁻¹' U) := by
     rw [← isOpen_coinduced]
     exact hU
-  have : IsOpen (fk ⁻¹' ((Q Y k) ⁻¹' U)) := by
+  have : IsOpen (fk ⁻¹' (Q ⁻¹' U)) := by
     apply IsOpen.preimage hfk
     assumption
-  have h_preimQ : IsOpen ((Q X k) ⁻¹' (expf ⁻¹' U)) := by
+  have h_preimQ : IsOpen (Q ⁻¹' (expf ⁻¹' U)) := by
     rwa [← preimages_commute]
   rwa [← isOpen_coinduced] at h_preimQ
 
@@ -263,14 +277,14 @@ open CategoryTheory
 -- push 20.11.
 
 noncomputable def exp_obj (k : ℕ) (X : TopCat) : TopCat where
-  carrier := FiniteSubsetSpace X k
+  carrier := FiniteSubsetSpace k X
   str := inferInstance
 
 noncomputable def exp_hom
     (k : ℕ) {X Y : Type*}
     [TopologicalSpace X] [TopologicalSpace Y]
     (f : C(X, Y)) :
-    C(FiniteSubsetSpace X k, FiniteSubsetSpace Y k) where
+    C(FiniteSubsetSpace k X, FiniteSubsetSpace k Y) where
   toFun := inducedMap k f
   continuous_toFun := continuous_induces_continuous f.continuous
 
@@ -299,14 +313,14 @@ noncomputable def exp_functor (k : ℕ) : TopCat ⥤ TopCat where
 theorem fss_compact
     {X : Type*} [TopologicalSpace X]
     {k : ℕ}
-    (hX : CompactSpace X) : CompactSpace (FiniteSubsetSpace X k) := by
-  have : IsCompact ((Q X k) '' Set.univ) := by
+    (hX : CompactSpace X) : CompactSpace (FiniteSubsetSpace k X) := by
+  have : IsCompact ((@Q k X _) '' Set.univ) := by
     apply IsCompact.image
     exact isCompact_univ
     exact continuous_coinduced_rng
-  have q_surjective : (Q X k) '' Set.univ = Set.univ := by
+  have q_surjective : (@Q k X _) '' Set.univ = Set.univ := by
     apply Set.image_univ_of_surjective
-    exact Q_surjective X k
+    exact Q_surjective
   rwa [← isCompact_univ_iff, ← q_surjective]
 
 
@@ -340,7 +354,7 @@ noncomputable def exp_homotopy
       grw [Finset.card_image_le] -- TODO: see if grw is applicable anywhere else
       exact tΛ.2.maxCard
   }
-  continuous_toFun := by sorry -- the proof I did
+  continuous_toFun := by sorry -- the interesting part
   -- TODO: the following two are the same
   map_zero_left := by
     intro Λ
@@ -370,7 +384,7 @@ theorem exp_preserves_homotopy
 theorem fss_hausdorff
     {X : Type*} [TopologicalSpace X]
     {k : ℕ}
-    (hX : T2Space X) : T2Space (FiniteSubsetSpace X k) := by
+    (hX : T2Space X) : T2Space (FiniteSubsetSpace k X) := by
   rw [t2_iff_nhds]
   intro S T
   contrapose
@@ -396,15 +410,69 @@ theorem fss_hausdorff
   obtain ⟨V, hV⟩ := hV
   let U_times_X_pow : Set (Fin k → X) := {x | x ⟨0, by sorry⟩ ∈ U}
   let V_pow : Set (Fin k → X) := {x | ∀ i, x i ∈ V}
-  let QU := (Q X k) '' U_times_X_pow
-  let QV := (Q X k) '' V_pow
+  let QU := Q '' U_times_X_pow
+  let QV := Q '' V_pow
   use QU, by sorry, QV, by sorry
   apply Disjoint.inter_eq
   apply Set.disjoint_image_image
   intro x hx y hy
-  have : ∀ l ∈ (Q X k y).finiteSubset, l ∈ V := by sorry
-  have : ∃ l ∈ (Q X k x).finiteSubset, l ∉ V := by sorry
-  have : (Q X k x).finiteSubset ≠ (Q X k y).finiteSubset := by sorry
+  have : ∀ l ∈ (Q y).finiteSubset, l ∈ V := by sorry
+  have : ∃ l ∈ (Q x).finiteSubset, l ∉ V := by sorry
+  have : (Q x).finiteSubset ≠ (Q y).finiteSubset := by sorry
   intro hQ
-  have : (Q X k x).finiteSubset = (Q X k y).finiteSubset := by congr
+  have : (Q x).finiteSubset = (Q y).finiteSubset := by congr
   contradiction
+
+def OrderedConfig (k : ℕ) (X : Type*) :=
+  {f : Fin k → X // Function.Injective f}
+
+instance topOC
+    {k : ℕ} {X : Type*} [TopologicalSpace X] :
+    TopologicalSpace (OrderedConfig k X) :=
+  instTopologicalSpaceSubtype
+
+def actPerm
+    {k : ℕ} {X : Type*}
+    (σ : Equiv.Perm (Fin k)) (x : OrderedConfig k X) :
+    OrderedConfig k X where
+  val := x.val ∘ σ
+  property := by
+    rw [Equiv.injective_comp]
+    exact x.property
+
+def UnorderedConfigSetoid (k : ℕ) (X : Type*) : Setoid (OrderedConfig k X) where
+  r x y := ∃ σ : Equiv.Perm (Fin k), actPerm σ x = y
+  iseqv := {
+    refl x := by
+      use Equiv.refl (Fin k)
+      congr
+    symm := by
+      intro x y hσ
+      obtain ⟨σ, hσ⟩ := hσ
+      use Equiv.symm σ
+      unfold actPerm at hσ ⊢
+      congr 1
+      obtain ⟨_⟩ := hσ
+      rw [Equiv.comp_symm_eq]
+    trans := by
+      intro x y z hσ hτ
+      obtain ⟨σ, hσ⟩ := hσ
+      obtain ⟨τ, hτ⟩ := hτ
+      use Equiv.trans τ σ
+      unfold actPerm at hσ hτ ⊢
+      congr 1
+      unfold Equiv.trans
+      simp
+      obtain ⟨_⟩ := hσ
+      obtain ⟨_⟩ := hτ
+      simp
+      rw [Function.comp_assoc]
+  }
+
+def UnorderedConfig (k : ℕ) (X : Type*) :=
+ Quotient (UnorderedConfigSetoid k X)
+
+instance topUC
+    {k : ℕ} {X : Type*} [TopologicalSpace X] :
+    TopologicalSpace (UnorderedConfig k X) :=
+  instTopologicalSpaceQuotient
